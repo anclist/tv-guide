@@ -1,6 +1,6 @@
 {
   "publicBaseUrl": "https://anclist.github.io/tv-guide",
-  "countries": ["CA", "US", "VE", "PE"],
+  "countries": ["CA", "US", "VE", "PE", "CO", "ES"],
   "intlCategories": ["news", "sports"],
   "sitePriority": [
     "i.mjh.nz", "pluto.tv", "plex.tv", "xumo.tv", "tvpassport.com", "tvguide.com",

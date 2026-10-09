@@ -2,7 +2,7 @@
 
 Daily-built IPTV playlist and XMLTV guide for TiviMate, from [iptv-org](https://github.com/iptv-org).
 
-**Scope:** every channel from Canada, the US, Venezuela and Peru, plus news and sports channels from any country.
+**Scope:** every channel from Canada, the US, Venezuela, Peru, Colombia and Spain, plus news and sports channels from any country.
 
 ## URLs
 | File | Use |
