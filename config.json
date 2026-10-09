@@ -7,5 +7,6 @@
     "mi.tv", "gatotv.com", "tv.movistar.com.pe", "tvhebdo.com", "distro.tv"
   ],
   "excludeSites": [],
-  "guideDays": 2
+  "guideDays": 2,
+  "batchSize": 100
 }

@@ -36,12 +36,30 @@ jobs:
           git clone --depth 1 -b master https://github.com/iptv-org/epg.git epg
           cd epg && npm install --no-audit --no-fund
 
-      - name: Grab guide
+      - name: Grab guide in batches
         working-directory: epg
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           DAYS=$(node -p "require('../config.json').guideDays")
-          npm run grab --- --channels=../custom.channels.xml --output=../public/guide.xml \
-            --gzip --days="$DAYS" --maxConnections=10 --timeout=15000
+          mkdir -p ../guides
+          failed=0
+          for f in ../batches/*.channels.xml; do
+            name=$(basename "$f" .channels.xml)
+            echo "::group::$name ($(grep -c '<channel ' "$f") channels)"
+            if ! npm run grab --- --channels="$f" --output="../guides/$name.xml" \
+                --days="$DAYS" --maxConnections=10 --timeout=15000; then
+              echo "::warning::$name failed, continuing"
+              failed=$((failed + 1))
+            fi
+            echo "::endgroup::"
+          done
+          echo "failed batches: $failed"
+
+      - name: Merge guide
+        run: |
+          node scripts/merge-guides.mjs public/guide.xml guides/*.xml
+          gzip -9 -k public/guide.xml
 
       - name: Check coverage
         run: node scripts/check-guide.mjs public/guide.xml public/playlist-guided.m3u

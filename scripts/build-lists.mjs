@@ -1,6 +1,6 @@
 // Builds playlist.m3u, playlist-guided.m3u and custom.channels.xml from the iptv-org API.
 // Usage: node scripts/build-lists.mjs [outDir=public]
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 
 const outDir = process.argv[2] ?? 'public'
 const cfg = JSON.parse(await readFile(new URL('../config.json', import.meta.url), 'utf8'))
@@ -112,6 +112,33 @@ await mkdir(outDir, { recursive: true })
 await writeFile(`${outDir}/playlist.m3u`, m3u(entries))
 await writeFile(`${outDir}/playlist-guided.m3u`, m3u(guided))
 await writeFile('custom.channels.xml', xml)
+
+// Batches for the grabber: grouped by site, at most cfg.batchSize channels each,
+// so one process never holds too much in memory and one bad site can't sink the run.
+const batchSize = cfg.batchSize ?? 150
+const bySiteList = new Map()
+for (const e of guided) {
+  const list = bySiteList.get(e.guide.site) ?? []
+  list.push(e); bySiteList.set(e.guide.site, list)
+}
+const batches = []
+let cur = []
+for (const list of [...bySiteList.values()].sort((a, b) => b.length - a.length)) {
+  for (let i = 0; i < list.length; i += batchSize) {
+    const part = list.slice(i, i + batchSize)
+    if (cur.length + part.length > batchSize) { if (cur.length) batches.push(cur); cur = [] }
+    cur.push(...part)
+  }
+}
+if (cur.length) batches.push(cur)
+await rm('batches', { recursive: true, force: true })
+await mkdir('batches', { recursive: true })
+for (const [i, b] of batches.entries()) {
+  const body = b.map(e => `  <channel site="${esc(e.guide.site)}" lang="${esc(e.guide.lang)}" xmltv_id="${esc(e.tvgId)}" site_id="${esc(e.guide.site_id)}">${esc(e.name)}</channel>`)
+  await writeFile(`batches/batch-${String(i + 1).padStart(2, '0')}.channels.xml`,
+    ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...body, '</channels>', ''].join('\n'))
+}
+console.log(`batches: ${batches.length} (max ${batchSize} channels each)`)
 
 const bySite = {}
 for (const e of guided) bySite[e.guide.site] = (bySite[e.guide.site] ?? 0) + 1

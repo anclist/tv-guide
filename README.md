@@ -14,7 +14,7 @@ Daily-built IPTV playlist and XMLTV guide for TiviMate, from [iptv-org](https://
 ## How it works
 A GitHub Actions job runs daily at 08:00 UTC:
 1. `scripts/build-lists.mjs` reads the iptv-org API. It picks one stream and one guide source per channel, skipping sites marked broken in iptv-org/epg `SITES.md`.
-2. The iptv-org/epg grabber downloads the guide for those channels.
+2. The iptv-org/epg grabber downloads the guide in batches of up to 100 channels (`batchSize` in `config.json`). A failed batch is logged as a warning and skipped. `scripts/merge-guides.mjs` combines the batches into one guide.
 3. `scripts/check-guide.mjs` writes coverage per group to the job summary.
 4. The files are published on GitHub Pages.
 
