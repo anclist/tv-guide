@@ -1,0 +1,61 @@
+name: build-guide
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build playlists and channel list
+        run: node scripts/build-lists.mjs public
+
+      - name: Install iptv-org/epg grabber
+        run: |
+          git clone --depth 1 -b master https://github.com/iptv-org/epg.git epg
+          cd epg && npm install --no-audit --no-fund
+
+      - name: Grab guide
+        working-directory: epg
+        run: |
+          DAYS=$(node -p "require('../config.json').guideDays")
+          npm run grab --- --channels=../custom.channels.xml --output=../public/guide.xml \
+            --gzip --days="$DAYS" --maxConnections=10 --timeout=15000
+
+      - name: Check coverage
+        run: node scripts/check-guide.mjs public/guide.xml public/playlist-guided.m3u
+
+      - name: Prepare site
+        run: |
+          rm -f public/guide.xml
+          cp README.md public/README.md
+          printf '<!doctype html><meta charset="utf-8"><title>TV guide</title><ul><li><a href="playlist-guided.m3u">playlist-guided.m3u</a><li><a href="playlist.m3u">playlist.m3u</a><li><a href="guide.xml.gz">guide.xml.gz</a></ul>\n' > public/index.html
+          ls -la public
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
