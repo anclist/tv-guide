@@ -52,16 +52,25 @@ console.log(`skipping ${exclude.size} broken/excluded sites: ${[...exclude].join
 
 const countries = new Set(cfg.countries)
 const intlCats = new Set(cfg.intlCategories)
+// Out-of-country news/sports are kept only if their main feed speaks one of these (ISO 639-3). Empty = any.
+const intlLangs = new Set(cfg.intlLanguages ?? [])
+
+const mainFeed = new Map()
+const langsOf = new Map()
+for (const f of feeds) if (f.is_main) { mainFeed.set(f.channel, f.id); langsOf.set(f.channel, f.languages ?? []) }
 
 // 1. Channel selection
 const selected = new Map()
+let langSkipped = 0
 for (const c of channels) {
   if (c.closed || c.is_nsfw) continue
   const cats = c.categories ?? []
-  const inCountry = countries.has(c.country)
-  const intl = cats.find(x => intlCats.has(x))
-  if (inCountry || intl) selected.set(c.id, c)
+  if (countries.has(c.country)) { selected.set(c.id, c); continue }
+  if (!cats.some(x => intlCats.has(x))) continue
+  if (intlLangs.size && !langsOf.get(c.id)?.some(l => intlLangs.has(l))) { langSkipped++; continue }
+  selected.set(c.id, c)
 }
+if (intlLangs.size) console.log(`skipped ${langSkipped} news/sports channels not in ${[...intlLangs].join(', ')}`)
 
 // 2. One stream per channel: prefer no UA/referrer, then higher quality
 const qualityRank = q => parseInt(q ?? '0', 10) || 0
@@ -108,9 +117,6 @@ for (const { src, items } of extras.filter(x => x.src.preferStream)) {
   }
   leftovers.set(src.id, rest)
 }
-
-const mainFeed = new Map()
-for (const f of feeds) if (f.is_main) mainFeed.set(f.channel, f.id)
 
 const logoFor = new Map()
 for (const l of logos) {
