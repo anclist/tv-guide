@@ -8,5 +8,60 @@
   ],
   "excludeSites": [],
   "guideDays": 2,
-  "batchSize": 100
+  "batchSize": 100,
+  "sameLineup": [["US", "CA"]],
+  "extraSources": [
+    {
+      "id": "freetv",
+      "playlist": "https://raw.githubusercontent.com/Free-TV/IPTV/master/playlist.m3u8",
+      "epg": null,
+      "preferStream": true
+    },
+    {
+      "id": "tdt",
+      "playlist": "https://www.tdtchannels.com/lists/tv.m3u8",
+      "epg": "https://www.tdtchannels.com/epg/TV.xml.gz",
+      "country": "ES",
+      "skipGroups": ["Int. ", "Eventuales", "Deportivos Int."]
+    },
+    {
+      "id": "pluto-us",
+      "enabled": false,
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_us.m3u",
+      "epg": "https://i.mjh.nz/PlutoTV/us.xml.gz",
+      "country": "US"
+    },
+    {
+      "id": "pluto-ca",
+      "enabled": false,
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_ca.m3u",
+      "epg": "https://i.mjh.nz/PlutoTV/ca.xml.gz",
+      "country": "CA"
+    },
+    {
+      "id": "pluto-es",
+      "enabled": false,
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_es.m3u",
+      "epg": "https://i.mjh.nz/PlutoTV/es.xml.gz",
+      "country": "ES"
+    },
+    {
+      "id": "samsung-us",
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_us.m3u",
+      "epg": "https://i.mjh.nz/SamsungTVPlus/us.xml.gz",
+      "country": "US"
+    },
+    {
+      "id": "samsung-ca",
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_ca.m3u",
+      "epg": "https://i.mjh.nz/SamsungTVPlus/ca.xml.gz",
+      "country": "CA"
+    },
+    {
+      "id": "samsung-es",
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_es.m3u",
+      "epg": "https://i.mjh.nz/SamsungTVPlus/es.xml.gz",
+      "country": "ES"
+    }
+  ]
 }
