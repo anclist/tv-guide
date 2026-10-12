@@ -44,3 +44,8 @@
 - [x] 8.1 Make `record-health.mjs` skip guide results for channels whose grab batch crashed (no output file), instead of recording them as empty, and tag each `guide-map.json` entry and fallback with its batch. Verify: a simulation with one batch file missing records 0 of its sites and all sites of the batch that ran.
 - [x] 8.2 Add `tv.mail.ru` to `excludeSites`: its site script crashes the grabber and takes the whole batch with it. Verify: `config.json` parses and the site is listed as excluded in the build log.
 - [x] 8.3 Add the per-source `geoBlocked` flag (Samsung, Pluto) so their streams count as geo-blocked to the source's country; Samsung US ranks last for a Canadian viewer and is never dropped. Verify: unit test for the merged US/CA channel and for a US-only channel, and fewer chosen `samsung-us` streams in a local build.
+
+## 9. Follow-ups: geo group and Mexico
+
+- [x] 9.1 Put channels whose chosen stream is still geo-blocked for the viewer into `<country> · Geo-blocked`. Verify: local build lists the Samsung US-only channels under `US · Geo-blocked`, and no plausible stream lands there.
+- [x] 9.2 Add `MX` to `countries` and the `plex-mx` extra source (Plex Mexico playlist + i.mjh.nz guide, not geo-blocked from Canada). Verify: local build shows plex-mx candidates and chosen guides, and `MX ·` groups in the playlist.

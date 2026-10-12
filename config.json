@@ -2,7 +2,7 @@
   "publicBaseUrl": "https://anclist.github.io/tv-guide",
   "viewerCountry": "CA",
   "viewerTimezone": "America/Toronto",
-  "countries": ["CA", "US", "VE", "PE", "CO", "ES"],
+  "countries": ["CA", "US", "MX", "VE", "PE", "CO", "ES"],
   "intlCategories": ["news", "sports"],
   "intlLanguages": ["eng", "spa", "fra"],
   "sitePriority": [
@@ -53,6 +53,12 @@
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_es.m3u",
       "epg": "https://i.mjh.nz/PlutoTV/es.xml.gz",
       "country": "ES"
+    },
+    {
+      "id": "plex-mx",
+      "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plex_mx.m3u",
+      "epg": "https://i.mjh.nz/Plex/mx.xml.gz",
+      "country": "MX"
     },
     {
       "id": "samsung-us",

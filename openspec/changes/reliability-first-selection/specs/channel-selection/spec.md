@@ -58,6 +58,10 @@ The build SHALL read `viewerCountry` from config. A stream labelled `Geo-blocked
 - **WHEN** `viewerCountry` is `CA`, `samsung-us` is configured with `geoBlocked: true` and `country: "US"`, and a channel has a `samsung-us` stream and a `samsung-ca` stream
 - **THEN** the `samsung-ca` stream is chosen, and a channel whose only stream is from `samsung-us` stays in the playlist with that stream
 
+#### Scenario: Geo-blocked leftovers get their own group
+- **WHEN** `viewerCountry` is `CA` and a US channel's chosen stream is still geo-blocked for the viewer, because no plausible candidate exists
+- **THEN** the channel is listed under the group `US · Geo-blocked` instead of its category group
+
 #### Scenario: US geo-blocked stream loses to a clean stream
 - **WHEN** `viewerCountry` is `CA`, a US channel has a 1080p `Geo-blocked` stream and a 720p unlabelled stream
 - **THEN** the 720p unlabelled stream is chosen

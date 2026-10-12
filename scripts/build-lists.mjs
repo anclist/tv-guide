@@ -4,7 +4,7 @@
 // Usage: node scripts/build-lists.mjs [outDir=public]
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { fetchText, parseM3u, parseXmltv, cleanName, normName, categoryFor } from './sources.mjs'
-import { clusterCandidates, pickPair, feedOf, tzEquivalent } from './select.mjs'
+import { clusterCandidates, pickPair, feedOf, tzEquivalent, availability } from './select.mjs'
 import { loadHealth, guideProof, keyOfUrl } from './health.mjs'
 import { probeAll } from './probe.mjs'
 
@@ -214,6 +214,8 @@ for (const cl of clusters.values()) {
     const tvgId = g ? `${g.source}:${g.origId}` : `${s.source}:${s.tvgId || cl.key}`
     e = { id: cl.id, tvgId, name: cleanName(it.name), group: `${s.country} · ${title(categoryFor(it.group))}`, logo: it.logo || anyLogo }
   }
+  // Still geo-blocked for the viewer (nothing better existed): keep it, but out of the way.
+  if (availability(s, ctx.channelCountry, viewerCountry) === 0) e.group = `${c?.country ?? s.country} · Geo-blocked`
   Object.assign(e, { stream: s, guide: g, ranked })
   entries.push(e)
   stats[s.source].streams++

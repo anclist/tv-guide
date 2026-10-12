@@ -2,7 +2,7 @@
 
 Daily-built IPTV playlist and XMLTV guide for TiviMate, from [iptv-org](https://github.com/iptv-org) plus the extra sources below.
 
-**Scope:** every channel from Canada, the US, Venezuela, Peru, Colombia and Spain, plus English, Spanish and French news and sports channels from any country.
+**Scope:** every channel from Canada, the US, Mexico, Venezuela, Peru, Colombia and Spain, plus English, Spanish and French news and sports channels from any country.
 
 ## Sources
 | Source | Gives | Notes |
@@ -11,6 +11,7 @@ Daily-built IPTV playlist and XMLTV guide for TiviMate, from [iptv-org](https://
 | [Free-TV/IPTV](https://github.com/Free-TV/IPTV) | Streams | Streams, preferred on ties. No guide of its own. |
 | [TDTChannels](https://github.com/LaQuay/TDTChannels) | Spanish channels + guide | International and event-only groups are skipped. |
 | Samsung TV Plus (US, CA, ES) | FAST channels + guide | Playlists from [BuddyChewChew/app-m3u-generator](https://github.com/BuddyChewChew/app-m3u-generator), guides from [i.mjh.nz](https://i.mjh.nz). Streams are geo-blocked to their region. |
+| Plex (MX) | Mexican FAST channels + guide | Playlist from [BuddyChewChew/app-m3u-generator](https://github.com/BuddyChewChew/app-m3u-generator), guide from [i.mjh.nz](https://i.mjh.nz). Plays from Canada. |
 | Pluto TV (US, CA, ES) | FAST channels + guide | Configured but `"enabled": false`: Pluto currently rejects these stream links ("channel not permitted for partner"). |
 
 ## URLs
@@ -43,7 +44,7 @@ Each (stream, guide) pair is then compared tier by tier; a later tier only break
 7. Stream feed in the same timezone as `viewerTimezone`.
 8. Guide site priority, then streams that need no user-agent/referrer, then quality.
 
-No channel is dropped by the probe; the job summary lists channels whose streams all look dead.
+No channel is dropped by the probe; the job summary lists channels whose streams all look dead. A channel whose best stream is still geo-blocked for `viewerCountry` (e.g. Samsung US-only channels) goes to its own group, `<country> · Geo-blocked`.
 
 Extra-source channels use tvg-ids like `samsung-es:ES300030ZT` so they never collide with iptv-org ids. The build log and job summary list per-source counts, name-based matches, stale ids (ids from your countries that iptv-org no longer has, usually a rename) and ambiguous feeds, to spot wrong merges.
 
