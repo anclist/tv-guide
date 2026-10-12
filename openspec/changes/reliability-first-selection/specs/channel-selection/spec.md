@@ -48,11 +48,15 @@ For each channel the build SHALL choose one (stream, guide) pair. The pair may h
 - **THEN** the iptv-org stream is chosen
 
 ### Requirement: Geo plausibility relative to the viewer
-The build SHALL read `viewerCountry` from config. A stream labelled `Geo-blocked` SHALL count as plausible only when its channel's country equals `viewerCountry`. A stream labelled `Not 24/7` SHALL rank below plausible streams without that label, and above streams that are geo-blocked for the viewer.
+The build SHALL read `viewerCountry` from config. A stream labelled `Geo-blocked` SHALL count as plausible only when its channel's country equals `viewerCountry`. A stream from an extra source configured with `geoBlocked: true` SHALL be treated as `Geo-blocked` to that source's own country, regardless of the channel it joins. A stream labelled `Not 24/7` SHALL rank below plausible streams without that label, and above streams that are geo-blocked for the viewer.
 
 #### Scenario: Canadian geo-blocked stream is kept for a Canadian viewer
 - **WHEN** `viewerCountry` is `CA` and a CA channel's only clean alternative is lower quality than a `Geo-blocked` stream
 - **THEN** the geo-blocked stream is not penalised for geo, and quality decides between them
+
+#### Scenario: Samsung US ranks last for a Canadian viewer
+- **WHEN** `viewerCountry` is `CA`, `samsung-us` is configured with `geoBlocked: true` and `country: "US"`, and a channel has a `samsung-us` stream and a `samsung-ca` stream
+- **THEN** the `samsung-ca` stream is chosen, and a channel whose only stream is from `samsung-us` stays in the playlist with that stream
 
 #### Scenario: US geo-blocked stream loses to a clean stream
 - **WHEN** `viewerCountry` is `CA`, a US channel has a 1080p `Geo-blocked` stream and a 720p unlabelled stream

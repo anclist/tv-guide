@@ -29,8 +29,9 @@ function offsetPair(tz) {
 export const tzEquivalent = (a, b) => { const x = offsetPair(a); return !!x && x === offsetPair(b) }
 
 // iptv-org labels are relative to the channel's own country: "Geo-blocked" usually plays only there.
+// Extra sources flagged geoBlocked carry the label with their own country as `geoCountry`.
 export const geoPlausible = (stream, channelCountry, viewerCountry) =>
-  !stream.labels?.includes('Geo-blocked') || channelCountry === viewerCountry
+  !stream.labels?.includes('Geo-blocked') || (stream.geoCountry ?? channelCountry) === viewerCountry
 
 // 0 = geo-blocked for the viewer, 1 = not 24/7, 2 = clean.
 export function availability(stream, channelCountry, viewerCountry) {

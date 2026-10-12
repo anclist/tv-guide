@@ -68,7 +68,7 @@ Alternative considered: a weighted numeric score, as today. Rejected, because th
 
 ### 4. Geo and timezone rules
 
-- **Geo-implausible** means `labels` includes `Geo-blocked` and the channel's country is not `viewerCountry`. Extra-source streams carry no labels, so they are treated as plausible.
+- **Geo-implausible** means `labels` includes `Geo-blocked` and the country it is blocked to is not `viewerCountry`. For iptv-org streams that country is the channel's. Extra sources flagged `geoBlocked` (Samsung, Pluto: they return 403 outside their region) give their streams the label with `geoCountry` set to the source's own country. That matters in a merged channel, where a Samsung US copy must not inherit CA. Unflagged extra sources carry no labels, so they count as plausible. The US runner cannot detect these blocks, because they return 200 there.
 - **Timezone equivalence**: compare `Intl.DateTimeFormat(..., {timeZone, timeZoneName:'longOffset'})` for Jan 15 and Jul 15 of the current year. The feed matches when any of its timezones equals the viewer's offset pair. Results are cached per zone. The noisy `timezones` data only affects tier 7.
 
 ### 5. Probe

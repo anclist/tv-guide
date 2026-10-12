@@ -46,6 +46,14 @@ test('geo: US geo-blocked 1080p loses to clean 720p for a Canadian viewer', () =
   assert.equal(availability(geo, 'US', 'CA'), 0)
   assert.equal(pickPair({ streams: [geo, clean], guides: [] }, ctxBase).stream, clean)
 })
+test('geo: flagged extra source uses its own country, not the channel\'s', () => {
+  const us = stream({ source: 'samsung-us', url: 'http://us', labels: ['Geo-blocked'], geoCountry: 'US', quality: 1080 })
+  const ca = stream({ source: 'samsung-ca', url: 'http://ca', labels: ['Geo-blocked'], geoCountry: 'CA', quality: 0 })
+  assert.equal(geoPlausible(us, 'CA', 'CA'), false)
+  assert.equal(geoPlausible(ca, 'US', 'CA'), true)
+  // a US-only channel keeps its stream, ranked last rather than dropped
+  assert.equal(pickPair({ streams: [us], guides: [] }, { ...ctxBase, channelCountry: 'CA' }).stream, us)
+})
 test('availability: Not 24/7 sits between clean and geo-blocked', () => {
   assert.equal(availability(stream({ labels: ['Not 24/7'] }), 'US', 'CA'), 1)
   assert.equal(availability(stream(), 'US', 'CA'), 2)

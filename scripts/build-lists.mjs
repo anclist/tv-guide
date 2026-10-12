@@ -120,7 +120,8 @@ for (const { src, items, epg } of extras) {
     if (!playable(it.url) || src.skipGroups?.some(g => it.group.startsWith(g))) { st.skipped++; continue }
     const base = { source: src.id, tvgId: it.tvgId, name: it.name, country: src.country ?? it.country, item: it }
     extraCands.push({
-      kind: 'stream', ...base, url: it.url, userAgent: it.userAgent, referrer: it.referrer, labels: [], quality: 0,
+      kind: 'stream', ...base, url: it.url, userAgent: it.userAgent, referrer: it.referrer, quality: 0,
+      labels: src.geoBlocked ? ['Geo-blocked'] : [], geoCountry: src.geoBlocked ? base.country : undefined,
       sourceCountry: src.country ?? null, preferStream: !!src.preferStream,
     })
     st.candidates++
@@ -294,8 +295,11 @@ for (const list of [...bySiteList.values()].sort((a, b) => b.length - a.length))
 if (cur.length) batches.push(cur)
 await rm('batches', { recursive: true, force: true })
 await mkdir('batches', { recursive: true })
+const batchOf = new Map() // tvgId -> batch name, so later steps can tell a crashed batch from an empty guide
 for (const [i, b] of batches.entries()) {
-  await writeFile(`batches/batch-${String(i + 1).padStart(2, '0')}.channels.xml`,
+  const name = `batch-${String(i + 1).padStart(2, '0')}`
+  for (const e of b) batchOf.set(e.tvgId, name)
+  await writeFile(`batches/${name}.channels.xml`,
     ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...b.map(channelXml), '</channels>', ''].join('\n'))
 }
 console.log(`batches: ${batches.length} (max ${batchSize} channels each)`)
@@ -304,7 +308,7 @@ console.log(`batches: ${batches.length} (max ${batchSize} channels each)`)
 const guideMap = {}
 for (const e of grabbed) {
   guideMap[e.tvgId] = {
-    name: e.name,
+    name: e.name, batch: batchOf.get(e.tvgId),
     candidates: e.ranked.filter(g => !g.external).map(g => ({ site: g.site, siteId: g.siteId, lang: g.lang })),
   }
 }

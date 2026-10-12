@@ -35,7 +35,7 @@ Candidates from every source are pooled per channel: matched by iptv-org id (any
 
 Each (stream, guide) pair is then compared tier by tier; a later tier only breaks ties:
 1. Stream not dead: failed the probe on `deadAfter` runs in a row. HTTP 401/403/451 look like geo blocks from the US runner and never count.
-2. Stream plausible for `viewerCountry`: a `Geo-blocked` stream only counts as plausible when the channel is from that country. `Not 24/7` ranks just below.
+2. Stream plausible for `viewerCountry`: a `Geo-blocked` stream only counts as plausible when the channel is from that country. Streams from extra sources with `"geoBlocked": true` (Samsung, Pluto) count as geo-blocked to the source's `country`, so for a Canadian viewer Samsung US ranks last and is used only when nothing else carries the channel. `Not 24/7` ranks just below plausible.
 3. Has a guide.
 4. Guide feed matches stream feed (East/West schedules).
 5. Guide proven: an extra-source guide with programmes now, or an iptv-org site that delivered programmes last run. One that came back empty ranks last.
@@ -50,7 +50,7 @@ Extra-source channels use tvg-ids like `samsung-es:ES300030ZT` so they never col
 Set TiviMate to update the playlist and EPG daily. FAST stream links are refreshed by each build.
 
 ## Changing scope
-Edit `config.json`. `countries` takes ISO codes, `intlCategories` takes iptv-org category IDs, `intlLanguages` takes ISO 639-3 codes (e.g. `eng`, `spa`, `fra`) that those out-of-country channels must speak (empty list = any language), and `sitePriority` and `excludeSites` control guide sources. `guideDays` sets how many days to fetch. `extraSources` lists the extra playlists: `id` (tvg-id prefix), `playlist`, `epg`, `country`, optional `skipGroups` (group-title prefixes to drop), `preferStream` (tiebreak preference) and `enabled`. Then run the workflow manually from the Actions tab.
+Edit `config.json`. `countries` takes ISO codes, `intlCategories` takes iptv-org category IDs, `intlLanguages` takes ISO 639-3 codes (e.g. `eng`, `spa`, `fra`) that those out-of-country channels must speak (empty list = any language), and `sitePriority` and `excludeSites` control guide sources. `guideDays` sets how many days to fetch. `extraSources` lists the extra playlists: `id` (tvg-id prefix), `playlist`, `epg`, `country`, optional `skipGroups` (group-title prefixes to drop), `preferStream` (tiebreak preference), `geoBlocked` (streams only play in the source's `country`) and `enabled`. Then run the workflow manually from the Actions tab.
 
 Selection settings: `viewerCountry` and `viewerTimezone` describe where the TV is (geo and East/West feed preference). `probe.timeoutMs` and `probe.concurrency` tune the stream probe, `deadAfter` is how many failed runs in a row mark a stream dead, and `fallbackGrab` turns the second guide grab on or off.
 

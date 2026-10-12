@@ -31,10 +31,16 @@
 
 ## 6. Workflow
 
-- [ ] 6.1 In `.github/workflows/build.yml`, add a fallback grab loop (skipped when `fallbackGrab` is false or there are no fallback batches), followed by `record-health.mjs` after the merge. Make sure `public/health.json` is part of the Pages artifact. Verify: a `workflow_dispatch` run succeeds and `${publicBaseUrl}/health.json` is served.
-- [ ] 6.2 Add `health.json` to the generated `index.html` link list. Verify: the deployed index shows the link.
+- [x] 6.1 In `.github/workflows/build.yml`, add a fallback grab loop (skipped when `fallbackGrab` is false or there are no fallback batches), followed by `record-health.mjs` after the merge. Make sure `public/health.json` is part of the Pages artifact. Verify: a `workflow_dispatch` run succeeds and `${publicBaseUrl}/health.json` is served.
+- [x] 6.2 Add `health.json` to the generated `index.html` link list. Verify: the deployed index shows the link.
 
 ## 7. Rollout verification
 
-- [ ] 7.1 Cold-start run: confirm the build completes, no stream is marked dead, and the coverage summary is at or above the 2026-10-11 baseline (1594 channels with programmes). Record the numbers.
+- [x] 7.1 Cold-start run: confirm the build completes, no stream is marked dead, and the coverage summary is at or above the 2026-10-11 baseline (1594 channels with programmes). Record the numbers.
 - [ ] 7.2 After the third daily run: confirm streaks are building up, fallback-used is above 0, the samsung-ca duplicate count has dropped compared to the baseline 237, and coverage has improved. Write down any tuning needed for the probe timeout, concurrency or prune age.
+
+## 8. Fixes from the first run
+
+- [x] 8.1 Make `record-health.mjs` skip guide results for channels whose grab batch crashed (no output file), instead of recording them as empty, and tag each `guide-map.json` entry and fallback with its batch. Verify: a simulation with one batch file missing records 0 of its sites and all sites of the batch that ran.
+- [x] 8.2 Add `tv.mail.ru` to `excludeSites`: its site script crashes the grabber and takes the whole batch with it. Verify: `config.json` parses and the site is listed as excluded in the build log.
+- [x] 8.3 Add the per-source `geoBlocked` flag (Samsung, Pluto) so their streams count as geo-blocked to the source's country; Samsung US ranks last for a Canadian viewer and is never dropped. Verify: unit test for the merged US/CA channel and for a US-only channel, and fewer chosen `samsung-us` streams in a local build.

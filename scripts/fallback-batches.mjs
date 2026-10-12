@@ -27,13 +27,16 @@ for (const [tvgId, g] of Object.entries(guideMap)) {
   const first = g.candidates[0]
   const next = g.candidates.slice(1).find(c => c.site !== first?.site)
   if (!next) continue
-  g.fallback = next
   picked.push({ tvgId, name: g.name, ...next })
+}
+const batchSize = cfg.batchSize ?? 150
+picked.sort((a, b) => a.site.localeCompare(b.site))
+for (const [i, c] of picked.entries()) {
+  const { tvgId, name, ...cand } = c
+  guideMap[tvgId].fallback = { ...cand, batch: `fallback-${String(Math.floor(i / batchSize) + 1).padStart(2, '0')}` }
 }
 await writeFile(mapPath, JSON.stringify(guideMap))
 
-const batchSize = cfg.batchSize ?? 150
-picked.sort((a, b) => a.site.localeCompare(b.site))
 for (let i = 0; i < picked.length; i += batchSize) {
   const body = picked.slice(i, i + batchSize).map(c =>
     `  <channel site="${esc(c.site)}" lang="${esc(c.lang)}" xmltv_id="${esc(c.tvgId)}" site_id="${esc(c.siteId)}">${esc(c.name)}</channel>`)

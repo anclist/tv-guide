@@ -9,7 +9,7 @@
     "i.mjh.nz", "pluto.tv", "plex.tv", "xumo.tv", "tvpassport.com", "tvguide.com",
     "mi.tv", "gatotv.com", "tv.movistar.com.pe", "tvhebdo.com", "distro.tv"
   ],
-  "excludeSites": [],
+  "excludeSites": ["tv.mail.ru"],
   "guideDays": 2,
   "batchSize": 100,
   "sameLineup": [["US", "CA"]],
@@ -32,6 +32,7 @@
     },
     {
       "id": "pluto-us",
+      "geoBlocked": true,
       "enabled": false,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_us.m3u",
       "epg": "https://i.mjh.nz/PlutoTV/us.xml.gz",
@@ -39,6 +40,7 @@
     },
     {
       "id": "pluto-ca",
+      "geoBlocked": true,
       "enabled": false,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_ca.m3u",
       "epg": "https://i.mjh.nz/PlutoTV/ca.xml.gz",
@@ -46,6 +48,7 @@
     },
     {
       "id": "pluto-es",
+      "geoBlocked": true,
       "enabled": false,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/plutotv_es.m3u",
       "epg": "https://i.mjh.nz/PlutoTV/es.xml.gz",
@@ -53,18 +56,21 @@
     },
     {
       "id": "samsung-us",
+      "geoBlocked": true,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_us.m3u",
       "epg": "https://i.mjh.nz/SamsungTVPlus/us.xml.gz",
       "country": "US"
     },
     {
       "id": "samsung-ca",
+      "geoBlocked": true,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_ca.m3u",
       "epg": "https://i.mjh.nz/SamsungTVPlus/ca.xml.gz",
       "country": "CA"
     },
     {
       "id": "samsung-es",
+      "geoBlocked": true,
       "playlist": "https://raw.githubusercontent.com/BuddyChewChew/app-m3u-generator/main/playlists/samsungtvplus_es.m3u",
       "epg": "https://i.mjh.nz/SamsungTVPlus/es.xml.gz",
       "country": "ES"
