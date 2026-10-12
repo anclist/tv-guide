@@ -1,8 +1,9 @@
 // health.json: probe streaks per stream and grab results per guide source, carried between runs
 // through the published Pages site. Format: see openspec design §6.
 const PRUNE_DAYS = 14
+const HISTORY_RUNS = 30
 
-export const emptyHealth = () => ({ version: 1, generatedAt: null, streams: {}, guides: {}, summary: null })
+export const emptyHealth = () => ({ version: 1, generatedAt: null, streams: {}, guides: {}, summary: null, history: [] })
 
 // Streams are keyed by URL without query string or fragment, so tokenised links keep their history.
 export function keyOfUrl(url) {
@@ -53,7 +54,11 @@ export function nextHealth(prev, probes, guideResults, { now = new Date(), summa
       ? { programmes: n, emptyStreak: 0, lastOk: today, seen: today }
       : { programmes: 0, emptyStreak: (p.emptyStreak ?? 0) + 1, lastOk: p.lastOk ?? null, seen: today }
   }
-  return { version: 1, generatedAt: now.toISOString().replace(/\.\d+Z$/, 'Z'), streams, guides, summary }
+  const generatedAt = now.toISOString().replace(/\.\d+Z$/, 'Z')
+  // Daily summaries, newest last, so trends can be read from the public file without Actions logs.
+  const history = prev.history?.length ? [...prev.history] : prev.summary ? [{ at: prev.generatedAt, ...prev.summary }] : []
+  if (summary) history.push({ at: generatedAt, ...summary })
+  return { version: 1, generatedAt, streams, guides, summary, history: history.slice(-HISTORY_RUNS) }
 }
 
 const entriesOf = x => (x instanceof Map ? x.entries() : Object.entries(x ?? {}))

@@ -48,3 +48,13 @@ test('loadHealth falls back to an empty record', async () => {
   const h = await loadHealth('https://anclist.github.io/tv-guide/does-not-exist.json')
   assert.deepEqual(h, emptyHealth())
 })
+
+test('history: seeded from a previous summary, appended, capped at 30', () => {
+  const prev = { ...emptyHealth(), generatedAt: '2026-10-12T02:08:45Z', summary: { withGuide: 1644 } }
+  let h = nextHealth(prev, {}, {}, { now, summary: { withGuide: 1700 } })
+  assert.deepEqual(h.history.map(x => x.withGuide), [1644, 1700])
+  assert.deepEqual(prev.history, []) // previous record untouched
+  for (let i = 0; i < 40; i++) h = nextHealth(h, {}, {}, { now, summary: { withGuide: i } })
+  assert.equal(h.history.length, 30)
+  assert.equal(h.history.at(-1).withGuide, 39)
+})

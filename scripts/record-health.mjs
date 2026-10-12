@@ -1,7 +1,7 @@
 // Writes health.json for the next run: probe streaks per stream, programme counts per guide
 // source, and the summary counts check-guide.mjs compares day over day.
 // Usage: node scripts/record-health.mjs <out health.json> <merged guide.xml> <playlist-guided.m3u>
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { nextHealth, guideKey } from './health.mjs'
 
@@ -44,8 +44,14 @@ for (const m of (await readFile(playlistPath, 'utf8')).matchAll(/tvg-id="([^"]*)
   if (withProg.has(m[1])) withGuide++
 }
 
+// A batch file with no matching guide file means the grab crashed.
+const batchNames = (await readdir('batches')).filter(f => f.endsWith('.channels.xml')).map(f => f.replace('.channels.xml', ''))
+const crashedBatches = batchNames.filter(b => !existsSync(`guides/${b}.xml`))
+
 const summary = {
   channels: diag.channels, guided, withGuide,
+  batches: batchNames.length, crashedBatches: crashedBatches.length,
+  perSource: Object.fromEntries(Object.entries(diag.perSource).map(([id, v]) => [id, { streams: v.streams, guides: v.guides }])),
   staleIds: diag.staleIds.length, ambiguousFeeds: diag.ambiguousFeeds.length, allDead: diag.allDead.length,
   fallbackTried, fallbackUsed,
 }

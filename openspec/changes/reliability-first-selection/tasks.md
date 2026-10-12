@@ -49,3 +49,7 @@
 
 - [x] 9.1 Put channels whose chosen stream is still geo-blocked for the viewer into `<country> · Geo-blocked`. Verify: local build lists the Samsung US-only channels under `US · Geo-blocked`, and no plausible stream lands there.
 - [x] 9.2 Add `MX` to `countries` and the `plex-mx` extra source (Plex Mexico playlist + i.mjh.nz guide, not geo-blocked from Canada). Verify: local build shows plex-mx candidates and chosen guides, and `MX ·` groups in the playlist.
+
+## 10. Public run history
+
+- [x] 10.1 Keep a capped daily `history` of summaries in `health.json` (seeded from the previous summary), and add batch, crashed-batch and per-source counts to the summary, so run trends can be reviewed from the public file without authenticated Actions logs. Verify: unit test for seeding, appending and the 30-run cap.
