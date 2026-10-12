@@ -1,5 +1,7 @@
 {
   "publicBaseUrl": "https://anclist.github.io/tv-guide",
+  "viewerCountry": "CA",
+  "viewerTimezone": "America/Toronto",
   "countries": ["CA", "US", "VE", "PE", "CO", "ES"],
   "intlCategories": ["news", "sports"],
   "intlLanguages": ["eng", "spa", "fra"],
@@ -11,6 +13,9 @@
   "guideDays": 2,
   "batchSize": 100,
   "sameLineup": [["US", "CA"]],
+  "probe": { "timeoutMs": 8000, "concurrency": 32 },
+  "deadAfter": 3,
+  "fallbackGrab": true,
   "extraSources": [
     {
       "id": "freetv",

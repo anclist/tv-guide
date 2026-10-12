@@ -1,15 +1,21 @@
 // Builds playlist.m3u, playlist-guided.m3u and custom.channels.xml from the iptv-org API,
 // merged with the extra sources in config.json (extraSources). Guides for extra sources
-// are written straight to guides/extra-<id>.xml.
+// are written straight to guides/extra-<id>.xml. Hand-off files for later steps go to state/.
 // Usage: node scripts/build-lists.mjs [outDir=public]
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { fetchText, parseM3u, parseXmltv, cleanName, normName, categoryFor } from './sources.mjs'
+import { clusterCandidates, pickPair, feedOf, tzEquivalent } from './select.mjs'
+import { loadHealth, guideProof, keyOfUrl } from './health.mjs'
+import { probeAll } from './probe.mjs'
 
 const outDir = process.argv[2] ?? 'public'
 const guidesDir = 'guides'
+const stateDir = 'state'
 const cfg = JSON.parse(await readFile(new URL('../config.json', import.meta.url), 'utf8'))
 const API = 'https://iptv-org.github.io/api'
 const SITES_MD = 'https://raw.githubusercontent.com/iptv-org/epg/master/SITES.md'
+const from = Date.now() - 2 * 3600e3
+const to = Date.now() + ((cfg.guideDays ?? 2) + 1) * 86400e3
 
 async function getJson(name) {
   const res = await fetch(`${API}/${name}.json`)
@@ -41,11 +47,11 @@ async function loadSource(src) {
   }
 }
 
-// Free-TV (preferStream) sources go first so their streams win. "enabled": false turns a source off.
-const extraCfg = (cfg.extraSources ?? []).filter(s => s.enabled !== false).sort((a, b) => !!b.preferStream - !!a.preferStream)
-const [channels, streams, guides, feeds, logos, broken, extras] = await Promise.all([
+// "enabled": false turns a source off. Source order does not affect selection.
+const extraCfg = (cfg.extraSources ?? []).filter(s => s.enabled !== false)
+const [channels, streams, guides, feeds, logos, broken, extras, health] = await Promise.all([
   getJson('channels'), getJson('streams'), getJson('guides'), getJson('feeds'), getJson('logos'), brokenSites(),
-  Promise.all(extraCfg.map(loadSource))
+  Promise.all(extraCfg.map(loadSource)), loadHealth(`${cfg.publicBaseUrl}/health.json`),
 ])
 const exclude = new Set([...broken, ...cfg.excludeSites])
 console.log(`skipping ${exclude.size} broken/excluded sites: ${[...exclude].join(', ') || 'none'}`)
@@ -54,10 +60,19 @@ const countries = new Set(cfg.countries)
 const intlCats = new Set(cfg.intlCategories)
 // Out-of-country news/sports are kept only if their main feed speaks one of these (ISO 639-3). Empty = any.
 const intlLangs = new Set(cfg.intlLanguages ?? [])
+const viewerCountry = cfg.viewerCountry ?? null
+const viewerTz = cfg.viewerTimezone ?? null
+const deadAfter = cfg.deadAfter ?? 3
 
 const mainFeed = new Map()
 const langsOf = new Map()
-for (const f of feeds) if (f.is_main) { mainFeed.set(f.channel, f.id); langsOf.set(f.channel, f.languages ?? []) }
+const feedCount = new Map()
+const feedTzs = new Map() // "<channel>@<feed>" -> timezones
+for (const f of feeds) {
+  feedCount.set(f.channel, (feedCount.get(f.channel) ?? 0) + 1)
+  feedTzs.set(`${f.channel}@${f.id}`, f.timezones ?? [])
+  if (f.is_main) { mainFeed.set(f.channel, f.id); langsOf.set(f.channel, f.languages ?? []) }
+}
 
 // 1. Channel selection
 const selected = new Map()
@@ -72,51 +87,98 @@ for (const c of channels) {
 }
 if (intlLangs.size) console.log(`skipped ${langSkipped} news/sports channels not in ${[...intlLangs].join(', ')}`)
 
-// 2. One stream per channel: prefer no UA/referrer, then higher quality
+// 2. Gather candidates from every source into one pool.
 const qualityRank = q => parseInt(q ?? '0', 10) || 0
-const bestStream = new Map()
+const playable = url => !/youtube\.com|youtu\.be|twitch\.tv|\[/.test(url)
+const prio = site => { const i = cfg.sitePriority.indexOf(site); return i === -1 ? cfg.sitePriority.length : i }
+const stats = Object.fromEntries(['iptv-org', ...extraCfg.map(s => s.id)].map(id => [id, { candidates: 0, skipped: 0, streams: 0, guides: 0 }]))
+
+const iptvCands = []
 for (const s of streams) {
   if (!s.channel || !selected.has(s.channel)) continue
-  const score = (s.user_agent || s.referrer ? 0 : 100000) + qualityRank(s.quality) - (s.labels?.length ? 1 : 0)
-  const cur = bestStream.get(s.channel)
-  if (!cur || score > cur.score) bestStream.set(s.channel, { ...s, score })
+  if (!playable(s.url)) { stats['iptv-org'].skipped++; continue }
+  iptvCands.push({
+    kind: 'stream', source: 'iptv-org', channel: s.channel, url: s.url, feed: s.feed ?? null,
+    labels: s.labels ?? [], quality: qualityRank(s.quality), userAgent: s.user_agent, referrer: s.referrer,
+  })
+  stats['iptv-org'].candidates++
+}
+for (const g of guides) {
+  if (!g.channel || !selected.has(g.channel) || exclude.has(g.site) || !g.site_id) continue
+  iptvCands.push({
+    kind: 'guide', source: 'iptv-org', channel: g.channel, site: g.site, siteId: g.site_id, lang: g.lang,
+    feed: g.feed ?? null, proof: guideProof(health, g.site, g.site_id),
+  })
 }
 
-// 2b. Preferred-stream sources (Free-TV) replace or fill iptv-org streams. Matched by
-// tvg-id (Free-TV uses iptv-org ids), else by country + normalized name.
-const keyOf = (country, name) => { const n = normName(name); return n ? `${country}|${n}` : null }
-// Countries in one sameLineup group share FAST lineups (e.g. US/CA), so extra sources dedupe across them.
-const lineupOf = c => cfg.sameLineup?.find(g => g.includes(c))?.[0] ?? c
-const lineupKey = (country, name) => keyOf(lineupOf(country), name)
-const playable = url => !/youtube\.com|youtu\.be|twitch\.tv|\[/.test(url)
-const stats = Object.fromEntries(extraCfg.map(s => [s.id, { streams: 0, filled: 0, added: 0, guides: 0, dup: 0, skipped: 0 }]))
-const nameMatches = []
-
-const iptvByKey = new Map()
-for (const c of selected.values()) {
-  for (const n of [c.name, ...(c.alt_names ?? [])]) {
-    const k = keyOf(c.country, n)
-    if (k && !iptvByKey.has(k)) iptvByKey.set(k, c.id)
-  }
-}
-
-const leftovers = new Map() // source id -> items not matched to iptv-org
-for (const { src, items } of extras.filter(x => x.src.preferStream)) {
+const extraCands = []
+for (const { src, items, epg } of extras) {
   const st = stats[src.id]
-  const rest = []
+  // Extra-source guides are proven by data in hand: programmes inside the guide window.
+  const epgIds = new Set(epg?.programmes.filter(p => p.stop >= from && p.start <= to).map(p => p.channel))
   for (const it of items) {
-    if (!playable(it.url)) { st.skipped++; continue }
-    const country = src.country ?? it.country
-    const id = selected.has(it.tvgId) ? it.tvgId : iptvByKey.get(keyOf(country, it.name))
-    if (!id) { rest.push(it); continue }
-    const cur = bestStream.get(id)
-    if (cur?.source) { st.dup++; continue } // first URL from the preferred source wins
-    if (id !== it.tvgId) nameMatches.push(`${src.id} "${it.name}" -> ${id}`)
-    cur ? st.streams++ : st.filled++
-    bestStream.set(id, { channel: id, url: it.url, user_agent: it.userAgent, referrer: it.referrer, source: src.id })
+    if (!playable(it.url) || src.skipGroups?.some(g => it.group.startsWith(g))) { st.skipped++; continue }
+    const base = { source: src.id, tvgId: it.tvgId, name: it.name, country: src.country ?? it.country, item: it }
+    extraCands.push({
+      kind: 'stream', ...base, url: it.url, userAgent: it.userAgent, referrer: it.referrer, labels: [], quality: 0,
+      sourceCountry: src.country ?? null, preferStream: !!src.preferStream,
+    })
+    st.candidates++
+    if (it.tvgId && epgIds.has(it.tvgId)) {
+      extraCands.push({ kind: 'guide', ...base, site: src.id, external: true, origId: it.tvgId, feed: null, proof: 2 })
+    }
   }
-  leftovers.set(src.id, rest)
 }
+
+// 3. Cluster by channel. US and CA share FAST lineups (sameLineup), so they dedupe as one country.
+const lineupOf = c => cfg.sameLineup?.find(g => g.includes(c))?.[0] ?? c
+const lineupKey = (country, name) => { const n = normName(name); return n ? `${lineupOf(country)}|${n}` : null }
+const { clusters, staleIds, nameMatches } = clusterCandidates({
+  selected, allChannelIds: new Set(channels.map(c => c.id)), lineupKey, countries,
+  iptv: iptvCands, extra: extraCands,
+})
+
+const ambiguousFeeds = []
+const ambiguousSeen = new Set()
+for (const cl of clusters.values()) {
+  const seenGuides = new Set()
+  cl.guides = cl.guides.filter(g => { const k = `${g.source}|${g.site}|${g.siteId ?? g.origId}`; return !seenGuides.has(k) && seenGuides.add(k) })
+  for (const s of cl.streams) {
+    const { feed, explicit } = cl.channel ? feedOf(s, mainFeed.get(cl.id)) : { feed: null, explicit: false }
+    s.feed = feed
+    if (cl.channel && !explicit && (feedCount.get(cl.id) ?? 0) > 1 && !ambiguousSeen.has(`${s.source}|${cl.id}`)) {
+      ambiguousSeen.add(`${s.source}|${cl.id}`)
+      ambiguousFeeds.push({ source: s.source, name: s.name ?? cl.channel.name, channel: `${cl.id}@${feed}`, feeds: feedCount.get(cl.id) })
+    }
+  }
+}
+
+// 4. Validate: probe every candidate stream. The effective streak includes this run's result.
+const targets = []
+for (const cl of clusters.values()) for (const s of cl.streams) targets.push({ key: s.url, url: s.url, userAgent: s.userAgent, referrer: s.referrer })
+const t0 = Date.now()
+const byUrl = await probeAll(targets, cfg.probe ?? {})
+// Health is keyed by URL without query: any ok wins, then any fail, else geo.
+const probes = new Map()
+const order = { geo: 0, fail: 1, ok: 2 }
+for (const [url, r] of byUrl) {
+  const k = keyOfUrl(url)
+  if (!probes.has(k) || order[r] > order[probes.get(k)]) probes.set(k, r)
+}
+const tally = { ok: 0, geo: 0, fail: 0 }
+for (const r of byUrl.values()) tally[r]++
+console.log(`probed ${byUrl.size} streams in ${Math.round((Date.now() - t0) / 1000)}s: ok=${tally.ok} geo=${tally.geo} fail=${tally.fail}`)
+const effectiveStreak = url => {
+  const k = keyOfUrl(url)
+  const prev = health.streams[k]?.streak ?? 0
+  const r = probes.get(k)
+  return r === 'ok' ? 0 : r === 'fail' ? prev + 1 : prev
+}
+
+// 5. Pick one (stream, guide) pair per channel.
+const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const attr = v => String(v ?? '').replace(/"/g, "'")
+const title = s => s.charAt(0).toUpperCase() + s.slice(1)
 
 const logoFor = new Map()
 for (const l of logos) {
@@ -125,96 +187,53 @@ for (const l of logos) {
   if (!cur || (l.feed == null && cur.feed != null)) logoFor.set(l.channel, l)
 }
 
-// 3. Guide entry per channel by site priority (same feed preferred)
-const prio = site => { const i = cfg.sitePriority.indexOf(site); return i === -1 ? cfg.sitePriority.length : i }
-const guideFor = new Map()
-for (const g of guides) {
-  if (!g.channel || !bestStream.has(g.channel) || exclude.has(g.site) || !g.site_id) continue
-  const s = bestStream.get(g.channel)
-  const feed = s.feed ?? mainFeed.get(g.channel)
-  const score = prio(g.site) * 10 + (g.feed === feed ? 0 : 1)
-  const cur = guideFor.get(g.channel)
-  if (!cur || score < cur.score) guideFor.set(g.channel, { ...g, score })
-}
-
-// 4. Build entries
-const esc = v => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-const attr = v => String(v ?? '').replace(/"/g, "'")
-const title = s => s.charAt(0).toUpperCase() + s.slice(1)
 const entries = []
-const entryByKey = new Map()
-const usedUrls = new Set()
-for (const [id, s] of bestStream) {
-  const c = selected.get(id)
-  const feed = s.feed ?? mainFeed.get(id)
-  const tvgId = feed ? `${id}@${feed}` : id
-  const cats = c.categories ?? []
-  const group = countries.has(c.country)
-    ? `${c.country} · ${title(cats[0] ?? 'general')}`
-    : `World · ${cats.includes('news') ? 'News' : 'Sports'}`
-  const e = { id, tvgId, name: c.name, group, logo: logoFor.get(id)?.url, stream: s, guide: guideFor.get(id), preferred: !!s.source }
+const allDead = []
+for (const cl of clusters.values()) {
+  for (const s of cl.streams) s.streak = effectiveStreak(s.url)
+  const c = cl.channel
+  const ctx = {
+    deadAfter, viewerCountry, prio,
+    channelCountry: c?.country ?? cl.streams[0].country,
+    mainFeed: c ? mainFeed.get(cl.id) ?? null : null,
+    feedMatchesViewerTz: f => !!viewerTz && !!c && (feedTzs.get(`${cl.id}@${f}`) ?? []).some(tz => tzEquivalent(tz, viewerTz)),
+  }
+  const { stream: s, guide: g, guides: ranked } = pickPair(cl, ctx)
+  const anyLogo = [...cl.streams, ...cl.guides].map(x => x.item?.logo).find(Boolean)
+  let e
+  if (c) {
+    const cats = c.categories ?? []
+    const group = countries.has(c.country)
+      ? `${c.country} · ${title(cats[0] ?? 'general')}`
+      : `World · ${cats.includes('news') ? 'News' : 'Sports'}`
+    const tvgId = g?.external ? `${g.source}:${g.origId}` : s.feed ? `${cl.id}@${s.feed}` : cl.id
+    e = { id: cl.id, tvgId, name: c.name, group, logo: logoFor.get(cl.id)?.url || anyLogo }
+  } else {
+    const it = s.item
+    const tvgId = g ? `${g.source}:${g.origId}` : `${s.source}:${s.tvgId || cl.key}`
+    e = { id: cl.id, tvgId, name: cleanName(it.name), group: `${s.country} · ${title(categoryFor(it.group))}`, logo: it.logo || anyLogo }
+  }
+  Object.assign(e, { stream: s, guide: g, ranked })
   entries.push(e)
-  usedUrls.add(s.url)
-  for (const n of [c.name, ...(c.alt_names ?? [])]) {
-    const k = lineupKey(c.country, n)
-    if (k && !entryByKey.has(k)) entryByKey.set(k, e)
-  }
-}
-
-// 4b. Extra sources: add new channels, or give a guide to channels that lack one.
-// Extra-source tvg-ids are "<source id>:<original id>" so they never collide with iptv-org ids.
-const keptGuideIds = new Map() // source id -> Set of original channel ids
-for (const { src, items, epg } of extras) {
-  const st = stats[src.id]
-  const epgIds = new Set(epg?.programmes.map(p => p.channel))
-  const kept = new Set()
-  const seen = new Set()
-  for (const it of src.preferStream ? leftovers.get(src.id) ?? [] : items) {
-    const country = src.country ?? it.country
-    const key = lineupKey(country, it.name)
-    const dedupe = it.tvgId || key
-    if (!key || !playable(it.url) || usedUrls.has(it.url) || !countries.has(country) ||
-        src.skipGroups?.some(g => it.group.startsWith(g))) { st.skipped++; continue }
-    if (seen.has(dedupe)) { st.dup++; continue } // same channel listed with several URLs
-    seen.add(dedupe)
-    const hasGuide = !!it.tvgId && epgIds.has(it.tvgId)
-    const tvgId = it.tvgId ? `${src.id}:${it.tvgId}` : ''
-    const stream = { url: it.url, user_agent: it.userAgent, referrer: it.referrer, source: src.id }
-    const e = entryByKey.get(key)
-    if (e) {
-      if (e.guide || !hasGuide) { st.dup++; continue }
-      e.tvgId = tvgId
-      e.guide = { site: src.id, external: true }
-      if (!e.preferred) { usedUrls.add(it.url); e.stream = stream }
-      e.logo ||= it.logo
-      kept.add(it.tvgId); st.guides++
-      if (nameMatches.length < 200) nameMatches.push(`${src.id} "${it.name}" -> ${e.id} (guide)`)
-      continue
-    }
-    const ne = {
-      id: tvgId || `${src.id}:${key}`, tvgId, name: cleanName(it.name),
-      group: `${country} · ${title(categoryFor(it.group))}`, logo: it.logo, stream,
-      guide: hasGuide ? { site: src.id, external: true } : undefined, preferred: !!src.preferStream,
-    }
-    entries.push(ne); entryByKey.set(key, ne); usedUrls.add(it.url)
-    if (hasGuide) kept.add(it.tvgId)
-    st.added++
-  }
-  keptGuideIds.set(src.id, kept)
+  stats[s.source].streams++
+  if (g) stats[g.source].guides++
+  if (cl.streams.every(x => x.streak >= deadAfter)) allDead.push({ id: e.tvgId, name: e.name, streams: cl.streams.length })
 }
 entries.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
 
 for (const [id, s] of Object.entries(stats)) {
-  console.log(`${id}: iptv-org streams replaced=${s.streams} filled=${s.filled}, guides attached=${s.guides}, ` +
-    `new channels=${s.added}, duplicates=${s.dup}, skipped=${s.skipped}`)
+  console.log(`${id}: candidates=${s.candidates} skipped=${s.skipped}, chosen streams=${s.streams} guides=${s.guides}`)
 }
 console.log(`name matches (${nameMatches.length}, first 30):\n  ${nameMatches.slice(0, 30).join('\n  ')}`)
+console.log(`stale ids (${staleIds.length}):\n  ${staleIds.map(x => `${x.source}: ${x.tvgId} ("${x.name}")`).join('\n  ')}`)
+console.log(`ambiguous feeds (${ambiguousFeeds.length}, first 30):\n  ${ambiguousFeeds.slice(0, 30).map(x => `${x.source} "${x.name}" -> ${x.channel} (${x.feeds} feeds)`).join('\n  ')}`)
+console.log(`all-dead channels (${allDead.length}, first 30):\n  ${allDead.slice(0, 30).map(x => `${x.id} "${x.name}" (${x.streams} streams)`).join('\n  ')}`)
 
 function m3u(list) {
   const lines = [`#EXTM3U x-tvg-url="${cfg.publicBaseUrl}/guide.xml.gz"`]
   for (const e of list) {
     lines.push(`#EXTINF:-1 tvg-id="${attr(e.tvgId)}" tvg-name="${attr(e.name)}"${e.logo ? ` tvg-logo="${attr(e.logo)}"` : ''} group-title="${attr(e.group)}",${e.name}`)
-    if (e.stream.user_agent) lines.push(`#EXTVLCOPT:http-user-agent=${e.stream.user_agent}`)
+    if (e.stream.userAgent) lines.push(`#EXTVLCOPT:http-user-agent=${e.stream.userAgent}`)
     if (e.stream.referrer) lines.push(`#EXTVLCOPT:http-referrer=${e.stream.referrer}`)
     lines.push(e.stream.url)
   }
@@ -223,20 +242,23 @@ function m3u(list) {
 
 const guided = entries.filter(e => e.guide)
 const grabbed = guided.filter(e => !e.guide.external) // extra-source guides are not grabbed
-const xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>',
-  ...grabbed.map(e => `  <channel site="${esc(e.guide.site)}" lang="${esc(e.guide.lang)}" xmltv_id="${esc(e.tvgId)}" site_id="${esc(e.guide.site_id)}">${esc(e.name)}</channel>`),
-  '</channels>', ''].join('\n')
+const channelXml = e => `  <channel site="${esc(e.guide.site)}" lang="${esc(e.guide.lang)}" xmltv_id="${esc(e.tvgId)}" site_id="${esc(e.guide.siteId)}">${esc(e.name)}</channel>`
+const xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...grabbed.map(channelXml), '</channels>', ''].join('\n')
 
 await mkdir(outDir, { recursive: true })
 await writeFile(`${outDir}/playlist.m3u`, m3u(entries))
 await writeFile(`${outDir}/playlist-guided.m3u`, m3u(guided))
 await writeFile('custom.channels.xml', xml)
 
-// Extra-source guides: kept channels only, ids prefixed, programmes trimmed to guideDays.
+// Extra-source guides: chosen channels only, ids prefixed, programmes trimmed to the guide window.
+const keptGuideIds = new Map() // source id -> Set of original channel ids
+for (const e of guided) {
+  if (!e.guide.external) continue
+  if (!keptGuideIds.has(e.guide.source)) keptGuideIds.set(e.guide.source, new Set())
+  keptGuideIds.get(e.guide.source).add(e.guide.origId)
+}
 await rm(guidesDir, { recursive: true, force: true })
 await mkdir(guidesDir, { recursive: true })
-const from = Date.now() - 2 * 3600e3
-const to = Date.now() + ((cfg.guideDays ?? 2) + 1) * 86400e3
 for (const { src, epg } of extras) {
   const kept = keptGuideIds.get(src.id)
   if (!epg || !kept?.size) continue
@@ -273,11 +295,32 @@ if (cur.length) batches.push(cur)
 await rm('batches', { recursive: true, force: true })
 await mkdir('batches', { recursive: true })
 for (const [i, b] of batches.entries()) {
-  const body = b.map(e => `  <channel site="${esc(e.guide.site)}" lang="${esc(e.guide.lang)}" xmltv_id="${esc(e.tvgId)}" site_id="${esc(e.guide.site_id)}">${esc(e.name)}</channel>`)
   await writeFile(`batches/batch-${String(i + 1).padStart(2, '0')}.channels.xml`,
-    ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...body, '</channels>', ''].join('\n'))
+    ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...b.map(channelXml), '</channels>', ''].join('\n'))
 }
 console.log(`batches: ${batches.length} (max ${batchSize} channels each)`)
+
+// Hand-off for fallback-batches.mjs, record-health.mjs and check-guide.mjs.
+const guideMap = {}
+for (const e of grabbed) {
+  guideMap[e.tvgId] = {
+    name: e.name,
+    candidates: e.ranked.filter(g => !g.external).map(g => ({ site: g.site, siteId: g.siteId, lang: g.lang })),
+  }
+}
+const perSource = Object.fromEntries(Object.entries(stats).map(([id, s]) => [id, {
+  ...s,
+  staleIds: staleIds.filter(x => x.source === id).length,
+  ambiguousFeeds: ambiguousFeeds.filter(x => x.source === id).length,
+}]))
+await rm(stateDir, { recursive: true, force: true })
+await mkdir(stateDir, { recursive: true })
+await writeFile(`${stateDir}/health.prev.json`, JSON.stringify(health))
+await writeFile(`${stateDir}/probes.json`, JSON.stringify(Object.fromEntries(probes)))
+await writeFile(`${stateDir}/guide-map.json`, JSON.stringify(guideMap))
+await writeFile(`${stateDir}/diagnostics.json`, JSON.stringify({
+  channels: entries.length, perSource, staleIds, ambiguousFeeds, allDead, nameMatches,
+}, null, 1))
 
 const bySite = {}
 for (const e of guided) bySite[e.guide.site] = (bySite[e.guide.site] ?? 0) + 1

@@ -56,10 +56,31 @@ jobs:
           done
           echo "failed batches: $failed"
 
+      - name: Grab fallback guides
+        run: |
+          node scripts/fallback-batches.mjs guides/batch-*.xml
+          shopt -s nullglob
+          files=(batches/fallback-*.channels.xml)
+          if [ ${#files[@]} -eq 0 ]; then echo "no fallback batches"; exit 0; fi
+          DAYS=$(node -p "require('./config.json').guideDays")
+          cd epg
+          for f in "${files[@]}"; do
+            name=$(basename "$f" .channels.xml)
+            echo "::group::$name ($(grep -c '<channel ' "../$f") channels)"
+            npm run grab --- --channels="../$f" --output="../guides/$name.xml" \
+              --days="$DAYS" --maxConnections=10 --timeout=15000 || echo "::warning::$name failed, continuing"
+            echo "::endgroup::"
+          done
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
       - name: Merge guide
         run: |
           node scripts/merge-guides.mjs public/guide.xml guides/*.xml
           gzip -9 -k public/guide.xml
+
+      - name: Record health
+        run: node scripts/record-health.mjs public/health.json public/guide.xml public/playlist-guided.m3u
 
       - name: Check coverage
         run: node scripts/check-guide.mjs public/guide.xml public/playlist-guided.m3u
@@ -68,7 +89,7 @@ jobs:
         run: |
           rm -f public/guide.xml
           cp README.md public/README.md
-          printf '<!doctype html><meta charset="utf-8"><title>TV guide</title><ul><li><a href="playlist-guided.m3u">playlist-guided.m3u</a><li><a href="playlist.m3u">playlist.m3u</a><li><a href="guide.xml.gz">guide.xml.gz</a></ul>\n' > public/index.html
+          printf '<!doctype html><meta charset="utf-8"><title>TV guide</title><ul><li><a href="playlist-guided.m3u">playlist-guided.m3u</a><li><a href="playlist.m3u">playlist.m3u</a><li><a href="guide.xml.gz">guide.xml.gz</a><li><a href="health.json">health.json</a></ul>\n' > public/index.html
           ls -la public
 
       - uses: actions/upload-pages-artifact@v3
