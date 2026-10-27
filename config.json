@@ -81,5 +81,16 @@
       "epg": "https://i.mjh.nz/SamsungTVPlus/es.xml.gz",
       "country": "ES"
     }
+  ],
+  "customGroups": [
+    {
+      "name": "Fútbol",
+      "channels": [
+        "ESPNLatinAmerica.us", "ESPN2LatinAmerica.us", "ESPN3LatinAmerica.us", "ESPN4LatinAmerica.us",
+        "ESPN5LatinAmerica.us", "ESPN6LatinAmerica.us", "ESPN7LatinAmerica.us", "ESPNExtraLatinAmerica.us",
+        "ESPNDeportes.us", "ESPNPremium.ar", "ESPNPremium.cl"
+      ],
+      "extraFeeds": ["ESPNLatinAmerica.us@Argentina", "ESPN2LatinAmerica.us@Argentina", "ESPN3LatinAmerica.us@Argentina"]
+    }
   ]
 }

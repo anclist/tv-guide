@@ -188,17 +188,22 @@ for (const l of logos) {
   if (!cur || (l.feed == null && cur.feed != null)) logoFor.set(l.channel, l)
 }
 
-const entries = []
-const allDead = []
-for (const cl of clusters.values()) {
-  for (const s of cl.streams) s.streak = effectiveStreak(s.url)
+const ctxFor = cl => {
   const c = cl.channel
-  const ctx = {
+  return {
     deadAfter, viewerCountry, prio,
     channelCountry: c?.country ?? cl.streams[0].country,
     mainFeed: c ? mainFeed.get(cl.id) ?? null : null,
     feedMatchesViewerTz: f => !!viewerTz && !!c && (feedTzs.get(`${cl.id}@${f}`) ?? []).some(tz => tzEquivalent(tz, viewerTz)),
   }
+}
+
+const entries = []
+const allDead = []
+for (const cl of clusters.values()) {
+  for (const s of cl.streams) s.streak = effectiveStreak(s.url)
+  const c = cl.channel
+  const ctx = ctxFor(cl)
   const { stream: s, guide: g, guides: ranked } = pickPair(cl, ctx)
   const anyLogo = [...cl.streams, ...cl.guides].map(x => x.item?.logo).find(Boolean)
   let e
@@ -221,6 +226,31 @@ for (const cl of clusters.values()) {
   stats[s.source].streams++
   if (g) stats[g.source].guides++
   if (cl.streams.every(x => x.streak >= deadAfter)) allDead.push({ id: e.tvgId, name: e.name, streams: cl.streams.length })
+}
+
+// 6. Custom groups (customGroups): listed channels move into the group, and each "<channel>@<feed>"
+// in extraFeeds adds that feed as its own entry next to the channel's pick. Pinned entries go in the
+// guided playlist even without a guide.
+const feedName = new Map(feeds.map(f => [`${f.channel}@${f.id}`, f.name]))
+for (const cg of cfg.customGroups ?? []) {
+  const ids = new Set(cg.channels ?? [])
+  for (const e of entries) if (ids.has(e.id)) Object.assign(e, { group: cg.name, pinned: true })
+  for (const key of cg.extraFeeds ?? []) {
+    const [id, feed] = key.split('@')
+    const cl = clusters.get(id)
+    const streams = cl?.channel ? cl.streams.filter(s => s.feed === feed) : []
+    if (!streams.length) { console.log(`::warning::customGroups: no stream for ${key}, skipping`); continue }
+    if (entries.some(e => e.id === id && e.stream.feed === feed)) continue // already the channel's pick
+    const ctx = ctxFor(cl)
+    const guides = cl.guides.filter(g => !g.external && (g.feed ?? ctx.mainFeed) === feed)
+    const { stream: s, guide: g, guides: ranked } = pickPair({ streams, guides }, ctx)
+    entries.push({
+      id, tvgId: key, name: `${cl.channel.name} ${feedName.get(key) ?? feed}`, group: cg.name, pinned: true,
+      logo: logoFor.get(id)?.url, stream: s, guide: g, ranked,
+    })
+    stats[s.source].streams++
+    if (g) stats[g.source].guides++
+  }
 }
 entries.sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name))
 
@@ -250,7 +280,7 @@ const xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<channels>', ...grabbed.
 
 await mkdir(outDir, { recursive: true })
 await writeFile(`${outDir}/playlist.m3u`, m3u(entries))
-await writeFile(`${outDir}/playlist-guided.m3u`, m3u(guided))
+await writeFile(`${outDir}/playlist-guided.m3u`, m3u(entries.filter(e => e.guide || e.pinned)))
 await writeFile('custom.channels.xml', xml)
 
 // Extra-source guides: chosen channels only, ids prefixed, programmes trimmed to the guide window.
