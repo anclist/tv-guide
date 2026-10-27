@@ -53,6 +53,8 @@ Set TiviMate to update the playlist and EPG daily. FAST stream links are refresh
 ## Changing scope
 Edit `config.json`. `countries` takes ISO codes, `intlCategories` takes iptv-org category IDs, `intlLanguages` takes ISO 639-3 codes (e.g. `eng`, `spa`, `fra`) that those out-of-country channels must speak (empty list = any language), and `sitePriority` and `excludeSites` control guide sources. `guideDays` sets how many days to fetch. `extraSources` lists the extra playlists: `id` (tvg-id prefix), `playlist`, `epg`, `country`, optional `skipGroups` (group-title prefixes to drop), `preferStream` (tiebreak preference), `geoBlocked` (streams only play in the source's `country`) and `enabled`. Then run the workflow manually from the Actions tab.
 
+`customGroups` builds hand-picked groups (e.g. `Fútbol`): `name`, `channels` (iptv-org ids moved out of their usual group into this one) and `extraFeeds` (`<channel>@<feed>` ids, each added as its own entry next to the channel's normal pick, e.g. ESPN's Argentina feed). Channels in a custom group are listed in `playlist-guided.m3u` even when they have no guide.
+
 Selection settings: `viewerCountry` and `viewerTimezone` describe where the TV is (geo and East/West feed preference). `probe.timeoutMs` and `probe.concurrency` tune the stream probe, `deadAfter` is how many failed runs in a row mark a stream dead, and `fallbackGrab` turns the second guide grab on or off.
 
 ## When the guide looks thin
